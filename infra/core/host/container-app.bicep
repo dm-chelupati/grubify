@@ -86,6 +86,26 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       scale: {
         minReplicas: minReplicas
         maxReplicas: maxReplicas
+        rules: external ? [
+          {
+            name: 'http-requests'
+            http: {
+              metadata: {
+                concurrentRequests: '30'  // Scale out when more than 30 concurrent requests per instance
+              }
+            }
+          }
+          {
+            name: 'cpu-scaling'
+            custom: {
+              type: 'cpu'
+              metadata: {
+                type: 'Utilization'
+                value: '70'  // Scale out when CPU usage exceeds 70%
+              }
+            }
+          }
+        ] : []
       }
     }
   }

@@ -10,8 +10,8 @@ namespace GrubifyApi.Controllers
         // In-memory cart storage (in production, use database)
         private static readonly Dictionary<string, Cart> UserCarts = new();
         
-        // Cache for performance optimization - stores request data for analytics
-        private static readonly List<byte[]> RequestDataCache = new();
+        // Cached food items for performance optimization  
+        private static readonly Lazy<Dictionary<int, FoodItem>> FoodItemsCache = new(() => InitializeFoodItems());
 
         [HttpGet("{userId}")]
         public ActionResult<Cart> GetCart(string userId)
@@ -24,15 +24,10 @@ namespace GrubifyApi.Controllers
         }
 
         [HttpPost("{userId}/items")]
-        public ActionResult<Cart> AddItemToCart(string userId, [FromBody] AddCartItemRequest request)
+        public async Task<ActionResult<Cart>> AddItemToCart(string userId, [FromBody] AddCartItemRequest request)
         {
-            // Store request data for analytics and performance monitoring
-            var requestData = new byte[10 * 1024 * 1024]; // 10MB buffer for request analytics
-            RequestDataCache.Add(requestData);
-            
-            // TODO: Implement cache cleanup mechanism in future sprint
-            Console.WriteLine($"Analytics cache: Added request data. Total entries: {RequestDataCache.Count}");
-            Console.WriteLine($"Cache size: {RequestDataCache.Count * 10}MB");
+            // TODO: Add structured logging for performance monitoring
+            var startTime = DateTime.UtcNow;
             
             if (!UserCarts.ContainsKey(userId))
             {
@@ -49,16 +44,20 @@ namespace GrubifyApi.Controllers
             }
             else
             {
+                var foodItem = await GetFoodItemByIdAsync(request.FoodItemId);
                 var newItem = new CartItem
                 {
                     Id = cart.Items.Count + 1,
                     FoodItemId = request.FoodItemId,
-                    FoodItem = GetFoodItemById(request.FoodItemId),
+                    FoodItem = foodItem,
                     Quantity = request.Quantity,
                     SpecialInstructions = request.SpecialInstructions
                 };
                 cart.Items.Add(newItem);
             }
+
+            var duration = DateTime.UtcNow - startTime;
+            Console.WriteLine($"AddItemToCart completed in {duration.TotalMilliseconds}ms for user {userId}");
 
             return Ok(cart);
         }
@@ -116,9 +115,18 @@ namespace GrubifyApi.Controllers
         }
 
         // Helper method to get food item (in production, this would query the database)
-        private FoodItem GetFoodItemById(int foodItemId)
+        private async Task<FoodItem> GetFoodItemByIdAsync(int foodItemId)
         {
-            // This is a simplified version - in production, inject the FoodItems service
+            // Simulate async database lookup with minimal delay
+            await Task.Delay(1); // Minimal async operation
+            
+            return FoodItemsCache.Value.TryGetValue(foodItemId, out var foodItem) 
+                ? foodItem 
+                : new FoodItem { Id = foodItemId, Name = "Unknown Item", Price = 0 };
+        }
+        
+        private static Dictionary<int, FoodItem> InitializeFoodItems()
+        {
             var foodItems = new List<FoodItem>
             {
                 new FoodItem { Id = 1, Name = "Margherita Pizza", Price = 16.99m, ImageUrl = "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=400&h=300&fit=crop", RestaurantId = 1 },
@@ -138,7 +146,7 @@ namespace GrubifyApi.Controllers
                 new FoodItem { Id = 15, Name = "Grilled Salmon Salad", Price = 18.99m, ImageUrl = "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=300&fit=crop", RestaurantId = 5 }
             };
 
-            return foodItems.FirstOrDefault(f => f.Id == foodItemId) ?? new FoodItem();
+            return foodItems.ToDictionary(f => f.Id);
         }
     }
 
