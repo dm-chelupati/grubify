@@ -73,8 +73,10 @@ module api 'core/host/container-app.bicep' = {
     containerImage: !empty(containerRegistryLoginServer) ? '${containerRegistryLoginServer}/grubify-api:latest' : 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
     targetPort: 8080
     external: true
-    minReplicas: 1  // Always keep 1 instance running
-    maxReplicas: 1  // No autoscaling - single instance only
+    cpu: '1.0'      // Updated to match live configuration
+    memory: '2.0Gi' // Updated to match live configuration
+    minReplicas: 3  // Updated to match live configuration (increased for reliability)
+    maxReplicas: 5  // Updated to match live configuration (allows scaling under load)
     env: [
       {
         name: 'ASPNETCORE_ENVIRONMENT'

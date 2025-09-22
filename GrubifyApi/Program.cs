@@ -4,8 +4,15 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+// Add memory cache for safe in-memory storage with limits
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1000; // Limit to 1000 items
+});
 
 // Configure forwarded headers for Azure Container Apps
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -41,7 +48,8 @@ app.UseForwardedHeaders();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 // Remove UseHttpsRedirection for Azure Container Apps - ACA handles TLS termination

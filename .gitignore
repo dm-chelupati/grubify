@@ -37,6 +37,7 @@ dist/
 # Azure
 .azure/
 *.azurepubxml
+*.json  # Generated Bicep ARM templates
 
 # Docker
 .dockerignore

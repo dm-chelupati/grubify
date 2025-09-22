@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using GrubifyApi.Models;
 
 namespace GrubifyApi.Controllers
@@ -7,16 +8,49 @@ namespace GrubifyApi.Controllers
     [Route("api/[controller]")]
     public class OrdersController : ControllerBase
     {
-        // In-memory order storage (in production, use database)
-        private static readonly List<Order> Orders = new();
-        private static int NextOrderId = 1;
+        private readonly IMemoryCache _memoryCache;
+        private static readonly TimeSpan OrderCacheExpiration = TimeSpan.FromDays(7);
+        private const string OrdersCacheKey = "all_orders";
+        private const string OrderIdCounterCacheKey = "order_id_counter";
+
+        public OrdersController(IMemoryCache memoryCache)
+        {
+            _memoryCache = memoryCache;
+        }
+
+        private List<Order> GetOrders()
+        {
+            if (!_memoryCache.TryGetValue(OrdersCacheKey, out List<Order>? orders))
+            {
+                orders = new List<Order>();
+                var cacheEntryOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = OrderCacheExpiration,
+                    Size = 1
+                };
+                _memoryCache.Set(OrdersCacheKey, orders, cacheEntryOptions);
+            }
+            return orders;
+        }
+
+        private int GetNextOrderId()
+        {
+            if (!_memoryCache.TryGetValue(OrderIdCounterCacheKey, out int nextId))
+            {
+                nextId = 1;
+            }
+            var newId = nextId + 1;
+            _memoryCache.Set(OrderIdCounterCacheKey, newId);
+            return nextId;
+        }
 
         [HttpPost]
         public ActionResult<Order> PlaceOrder([FromBody] PlaceOrderRequest request)
         {
+            var orders = GetOrders();
             var order = new Order
             {
-                Id = NextOrderId++,
+                Id = GetNextOrderId(),
                 UserId = request.UserId,
                 RestaurantId = request.RestaurantId,
                 Items = request.Items.Select(item => new CartItem
@@ -34,7 +68,15 @@ namespace GrubifyApi.Controllers
                 SpecialInstructions = request.SpecialInstructions
             };
 
-            Orders.Add(order);
+            orders.Add(order);
+
+            // Update cache
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = OrderCacheExpiration,
+                Size = 1
+            };
+            _memoryCache.Set(OrdersCacheKey, orders, cacheEntryOptions);
 
             // Simulate order status updates after placement
             Task.Run(async () =>
@@ -59,7 +101,8 @@ namespace GrubifyApi.Controllers
         [HttpGet("{id}")]
         public ActionResult<Order> GetOrder(int id)
         {
-            var order = Orders.FirstOrDefault(o => o.Id == id);
+            var orders = GetOrders();
+            var order = orders.FirstOrDefault(o => o.Id == id);
             if (order == null)
             {
                 return NotFound();
@@ -70,7 +113,8 @@ namespace GrubifyApi.Controllers
         [HttpGet("user/{userId}")]
         public ActionResult<IEnumerable<Order>> GetUserOrders(string userId)
         {
-            var userOrders = Orders.Where(o => o.UserId == userId)
+            var orders = GetOrders();
+            var userOrders = orders.Where(o => o.UserId == userId)
                                  .OrderByDescending(o => o.OrderDate)
                                  .ToList();
             return Ok(userOrders);
@@ -79,7 +123,8 @@ namespace GrubifyApi.Controllers
         [HttpGet("user/{userId}/active")]
         public ActionResult<IEnumerable<Order>> GetActiveUserOrders(string userId)
         {
-            var activeOrders = Orders.Where(o => o.UserId == userId && 
+            var orders = GetOrders();
+            var activeOrders = orders.Where(o => o.UserId == userId && 
                                           o.Status != OrderStatus.Delivered && 
                                           o.Status != OrderStatus.Cancelled)
                                    .OrderByDescending(o => o.OrderDate)
@@ -90,7 +135,8 @@ namespace GrubifyApi.Controllers
         [HttpPut("{id}/cancel")]
         public ActionResult<Order> CancelOrder(int id)
         {
-            var order = Orders.FirstOrDefault(o => o.Id == id);
+            var orders = GetOrders();
+            var order = orders.FirstOrDefault(o => o.Id == id);
             if (order == null)
             {
                 return NotFound();
@@ -103,13 +149,23 @@ namespace GrubifyApi.Controllers
             }
 
             order.Status = OrderStatus.Cancelled;
+
+            // Update cache
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = OrderCacheExpiration,
+                Size = 1
+            };
+            _memoryCache.Set(OrdersCacheKey, orders, cacheEntryOptions);
+
             return Ok(order);
         }
 
         [HttpGet("restaurant/{restaurantId}")]
         public ActionResult<IEnumerable<Order>> GetRestaurantOrders(int restaurantId)
         {
-            var restaurantOrders = Orders.Where(o => o.RestaurantId == restaurantId)
+            var orders = GetOrders();
+            var restaurantOrders = orders.Where(o => o.RestaurantId == restaurantId)
                                        .OrderByDescending(o => o.OrderDate)
                                        .ToList();
             return Ok(restaurantOrders);
@@ -118,7 +174,8 @@ namespace GrubifyApi.Controllers
         [HttpPut("{id}/status")]
         public ActionResult<Order> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest request)
         {
-            var order = Orders.FirstOrDefault(o => o.Id == id);
+            var orders = GetOrders();
+            var order = orders.FirstOrDefault(o => o.Id == id);
             if (order == null)
             {
                 return NotFound();
@@ -129,6 +186,14 @@ namespace GrubifyApi.Controllers
             {
                 order.DeliveryTime = DateTime.UtcNow;
             }
+
+            // Update cache
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = OrderCacheExpiration,
+                Size = 1
+            };
+            _memoryCache.Set(OrdersCacheKey, orders, cacheEntryOptions);
 
             return Ok(order);
         }

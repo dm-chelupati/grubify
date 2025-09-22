@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using GrubifyApi.Models;
 
 namespace GrubifyApi.Controllers
@@ -7,39 +8,40 @@ namespace GrubifyApi.Controllers
     [Route("api/[controller]")]
     public class CartController : ControllerBase
     {
-        // In-memory cart storage (in production, use database)
-        private static readonly Dictionary<string, Cart> UserCarts = new();
-        
-        // Cache for performance optimization - stores request data for analytics
-        private static readonly List<byte[]> RequestDataCache = new();
+        private readonly IMemoryCache _memoryCache;
+        private static readonly TimeSpan CartCacheExpiration = TimeSpan.FromHours(24);
+
+        public CartController(IMemoryCache memoryCache)
+        {
+            _memoryCache = memoryCache;
+        }
 
         [HttpGet("{userId}")]
         public ActionResult<Cart> GetCart(string userId)
         {
-            if (!UserCarts.ContainsKey(userId))
+            var cacheKey = $"cart_{userId}";
+            if (!_memoryCache.TryGetValue(cacheKey, out Cart? cart))
             {
-                UserCarts[userId] = new Cart { UserId = userId };
+                cart = new Cart { UserId = userId };
+                var cacheEntryOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = CartCacheExpiration,
+                    Size = 1 // Each cart counts as 1 unit towards the size limit
+                };
+                _memoryCache.Set(cacheKey, cart, cacheEntryOptions);
             }
-            return Ok(UserCarts[userId]);
+            return Ok(cart);
         }
 
         [HttpPost("{userId}/items")]
         public ActionResult<Cart> AddItemToCart(string userId, [FromBody] AddCartItemRequest request)
         {
-            // Store request data for analytics and performance monitoring
-            var requestData = new byte[10 * 1024 * 1024]; // 10MB buffer for request analytics
-            RequestDataCache.Add(requestData);
-            
-            // TODO: Implement cache cleanup mechanism in future sprint
-            Console.WriteLine($"Analytics cache: Added request data. Total entries: {RequestDataCache.Count}");
-            Console.WriteLine($"Cache size: {RequestDataCache.Count * 10}MB");
-            
-            if (!UserCarts.ContainsKey(userId))
+            var cacheKey = $"cart_{userId}";
+            if (!_memoryCache.TryGetValue(cacheKey, out Cart? cart))
             {
-                UserCarts[userId] = new Cart { UserId = userId };
+                cart = new Cart { UserId = userId };
             }
 
-            var cart = UserCarts[userId];
             var existingItem = cart.Items.FirstOrDefault(i => i.FoodItemId == request.FoodItemId);
 
             if (existingItem != null)
@@ -60,18 +62,26 @@ namespace GrubifyApi.Controllers
                 cart.Items.Add(newItem);
             }
 
+            // Update cache with extended expiration
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = CartCacheExpiration,
+                Size = 1
+            };
+            _memoryCache.Set(cacheKey, cart, cacheEntryOptions);
+
             return Ok(cart);
         }
 
         [HttpPut("{userId}/items/{itemId}")]
         public ActionResult<Cart> UpdateCartItem(string userId, int itemId, [FromBody] UpdateCartItemRequest request)
         {
-            if (!UserCarts.ContainsKey(userId))
+            var cacheKey = $"cart_{userId}";
+            if (!_memoryCache.TryGetValue(cacheKey, out Cart? cart))
             {
                 return NotFound("Cart not found");
             }
 
-            var cart = UserCarts[userId];
             var item = cart.Items.FirstOrDefault(i => i.Id == itemId);
 
             if (item == null)
@@ -82,18 +92,26 @@ namespace GrubifyApi.Controllers
             item.Quantity = request.Quantity;
             item.SpecialInstructions = request.SpecialInstructions;
 
+            // Update cache
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = CartCacheExpiration,
+                Size = 1
+            };
+            _memoryCache.Set(cacheKey, cart, cacheEntryOptions);
+
             return Ok(cart);
         }
 
         [HttpDelete("{userId}/items/{itemId}")]
         public ActionResult<Cart> RemoveItemFromCart(string userId, int itemId)
         {
-            if (!UserCarts.ContainsKey(userId))
+            var cacheKey = $"cart_{userId}";
+            if (!_memoryCache.TryGetValue(cacheKey, out Cart? cart))
             {
                 return NotFound("Cart not found");
             }
 
-            var cart = UserCarts[userId];
             var item = cart.Items.FirstOrDefault(i => i.Id == itemId);
 
             if (item == null)
@@ -102,15 +120,31 @@ namespace GrubifyApi.Controllers
             }
 
             cart.Items.Remove(item);
+
+            // Update cache
+            var cacheEntryOptions = new MemoryCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = CartCacheExpiration,
+                Size = 1
+            };
+            _memoryCache.Set(cacheKey, cart, cacheEntryOptions);
+
             return Ok(cart);
         }
 
         [HttpDelete("{userId}")]
         public ActionResult ClearCart(string userId)
         {
-            if (UserCarts.ContainsKey(userId))
+            var cacheKey = $"cart_{userId}";
+            if (_memoryCache.TryGetValue(cacheKey, out Cart? cart))
             {
-                UserCarts[userId].Items.Clear();
+                cart.Items.Clear();
+                var cacheEntryOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = CartCacheExpiration,
+                    Size = 1
+                };
+                _memoryCache.Set(cacheKey, cart, cacheEntryOptions);
             }
             return Ok();
         }
