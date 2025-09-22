@@ -8,12 +8,32 @@ namespace GrubifyApi.Controllers
     public class OrdersController : ControllerBase
     {
         // In-memory order storage (in production, use database)
+        // WARNING: This static list will grow unbounded and is not suitable for production
+        // TODO: Replace with proper database storage or implement cleanup mechanism
         private static readonly List<Order> Orders = new();
         private static int NextOrderId = 1;
+        
+        // Limit to prevent memory exhaustion in demo environment
+        private const int MAX_ORDERS = 10000;
 
         [HttpPost]
         public ActionResult<Order> PlaceOrder([FromBody] PlaceOrderRequest request)
         {
+            // Prevent unbounded growth of orders list in demo environment
+            lock (Orders)
+            {
+                if (Orders.Count >= MAX_ORDERS)
+                {
+                    // Remove oldest orders to prevent memory exhaustion
+                    var oldestOrders = Orders.OrderBy(o => o.OrderDate).Take(1000).ToList();
+                    foreach (var oldOrder in oldestOrders)
+                    {
+                        Orders.Remove(oldOrder);
+                    }
+                    Console.WriteLine($"Cleaned up old orders. Current count: {Orders.Count}");
+                }
+            }
+            
             var order = new Order
             {
                 Id = NextOrderId++,

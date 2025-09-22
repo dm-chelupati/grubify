@@ -8,8 +8,8 @@ param containerName string
 param containerImage string
 param targetPort int = 80
 param external bool = false
-param cpu string = '0.5'
-param memory string = '1.0Gi'
+param cpu string = '1.0'
+param memory string = '2.0Gi'
 param minReplicas int = 1
 param maxReplicas int = 3
 param env array = []
