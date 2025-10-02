@@ -61,8 +61,8 @@ Before starting, run our prerequisites check script:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/grubify.git
-cd Grubify
+git clone https://github.com/dm-chelupati/grubify.git
+cd grubify
 
 # ⚠️ IMPORTANT: Start Docker Desktop before proceeding
 # Verify Docker is running
