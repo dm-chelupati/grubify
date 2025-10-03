@@ -65,8 +65,10 @@ module api 'core/host/container-app.bicep' = {
     containerImage: !empty(apiImage) ? apiImage : 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
     targetPort: 8080
     external: true
-    minReplicas: 1  // Always keep 1 instance running
-    maxReplicas: 1  // No autoscaling - single instance only
+    cpu: '1.0'       // Increased from 0.5 to prevent memory exhaustion (INC0010010)
+    memory: '2.0Gi'  // Increased from 1.0Gi to prevent OOM errors (INC0010010)
+    minReplicas: 2   // Minimum 2 replicas for high availability
+    maxReplicas: 5   // Scale up to 5 replicas under load
     env: [
       {
         name: 'ASPNETCORE_ENVIRONMENT'
