@@ -72,7 +72,7 @@ namespace GrubifyApi.Controllers
                 else
                 {
                     var foodItem = GetFoodItemById(request.FoodItemId);
-                    if (foodItem.Id == 0)
+                    if (foodItem == null)
                     {
                         return NotFound(new { error = "Food item not found" });
                     }
@@ -101,6 +101,23 @@ namespace GrubifyApi.Controllers
         [HttpPut("{userId}/items/{itemId}")]
         public ActionResult<Cart> UpdateCartItem(string userId, int itemId, [FromBody] UpdateCartItemRequest request)
         {
+            // Validate quantity
+            if (request.Quantity <= 0)
+            {
+                return BadRequest(new { error = "Quantity must be greater than 0" });
+            }
+
+            if (request.Quantity > 99)
+            {
+                return BadRequest(new { error = "Quantity cannot exceed 99" });
+            }
+
+            // Validate special instructions size
+            if (!string.IsNullOrEmpty(request.SpecialInstructions) && request.SpecialInstructions.Length > 500)
+            {
+                return BadRequest(new { error = "Special instructions cannot exceed 500 characters" });
+            }
+
             if (!UserCarts.ContainsKey(userId))
             {
                 return NotFound("Cart not found");
@@ -151,7 +168,7 @@ namespace GrubifyApi.Controllers
         }
 
         // Helper method to get food item (in production, this would query the database)
-        private FoodItem GetFoodItemById(int foodItemId)
+        private FoodItem? GetFoodItemById(int foodItemId)
         {
             // This is a simplified version - in production, inject the FoodItems service
             var foodItems = new List<FoodItem>
@@ -173,7 +190,7 @@ namespace GrubifyApi.Controllers
                 new FoodItem { Id = 15, Name = "Grilled Salmon Salad", Price = 18.99m, ImageUrl = "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=300&fit=crop", RestaurantId = 5 }
             };
 
-            return foodItems.FirstOrDefault(f => f.Id == foodItemId) ?? new FoodItem();
+            return foodItems.FirstOrDefault(f => f.Id == foodItemId);
         }
     }
 
