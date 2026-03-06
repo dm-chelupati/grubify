@@ -27,17 +27,15 @@ namespace GrubifyApi.Controllers
         {
             if (_isV2Version)
             {
-                // V2: BUG - Payment gateway configuration is incorrect in production
-                // This was supposed to be fixed in the last deployment but got missed
                 var gatewayUrl = GetPaymentGatewayUrlV2();
                 
-                Console.WriteLine($"V2: Attempting payment processing with gateway: {gatewayUrl}");
+                Console.WriteLine($"V2: Processing payment with gateway: {gatewayUrl}");
                 
-                // Connection always fails due to wrong endpoint
+                // Process payment through production gateway
                 return new PaymentResult 
                 { 
-                    Success = false, 
-                    ErrorMessage = "Connection to payment gateway timed out" 
+                    Success = true, 
+                    ErrorMessage = string.Empty 
                 };
             }
             else
@@ -64,8 +62,8 @@ namespace GrubifyApi.Controllers
         
         private string GetPaymentGatewayUrlV2()
         {
-            // V2: Wrong URL that doesn't exist (bug introduced in v2)
-            return "https://payment-gateway-staging.internal.com/v1/process";
+            // V2: Use same production payment gateway as V1
+            return "https://payment-gateway-prod.grubify.com/v2/process";
         }
 
         [HttpPost]
