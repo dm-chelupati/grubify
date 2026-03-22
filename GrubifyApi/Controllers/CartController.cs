@@ -7,11 +7,15 @@ namespace GrubifyApi.Controllers
     [Route("api/[controller]")]
     public class CartController : ControllerBase
     {
+        private readonly ILogger<CartController> _logger;
+
         // In-memory cart storage (in production, use database)
         private static readonly Dictionary<string, Cart> UserCarts = new();
-        
-        // Cache for performance optimization - stores request data for analytics
-        private static readonly List<byte[]> RequestDataCache = new();
+
+        public CartController(ILogger<CartController> logger)
+        {
+            _logger = logger;
+        }
 
         [HttpGet("{userId}")]
         public ActionResult<Cart> GetCart(string userId)
@@ -26,14 +30,22 @@ namespace GrubifyApi.Controllers
         [HttpPost("{userId}/items")]
         public ActionResult<Cart> AddItemToCart(string userId, [FromBody] AddCartItemRequest request)
         {
-            // Store request data for analytics and performance monitoring
-            var requestData = new byte[10 * 1024 * 1024]; // 10MB buffer for request analytics
-            RequestDataCache.Add(requestData);
+            var startTime = DateTime.UtcNow;
             
-            // TODO: Implement cache cleanup mechanism in future sprint
-            Console.WriteLine($"Analytics cache: Added request data. Total entries: {RequestDataCache.Count}");
-            Console.WriteLine($"Cache size: {RequestDataCache.Count * 10}MB");
-            
+            // Input validation to prevent resource exhaustion
+            if (request.Quantity <= 0 || request.Quantity > 100)
+            {
+                _logger.LogWarning("Invalid quantity for userId {UserId}: {Quantity}", userId, request.Quantity);
+                return BadRequest("Quantity must be between 1 and 100");
+            }
+
+            if (!string.IsNullOrEmpty(request.SpecialInstructions) && request.SpecialInstructions.Length > 500)
+            {
+                _logger.LogWarning("Special instructions too long for userId {UserId}: {Length} characters", 
+                    userId, request.SpecialInstructions.Length);
+                return BadRequest("Special instructions must not exceed 500 characters");
+            }
+
             if (!UserCarts.ContainsKey(userId))
             {
                 UserCarts[userId] = new Cart { UserId = userId };
@@ -59,6 +71,12 @@ namespace GrubifyApi.Controllers
                 };
                 cart.Items.Add(newItem);
             }
+
+            var elapsed = (DateTime.UtcNow - startTime).TotalMilliseconds;
+            _logger.LogInformation(
+                "AddItemToCart completed for userId {UserId}, foodItemId {FoodItemId}, quantity {Quantity}, " +
+                "cartItemCount {CartItemCount}, elapsedMs {ElapsedMs}",
+                userId, request.FoodItemId, request.Quantity, cart.Items.Count, elapsed);
 
             return Ok(cart);
         }
