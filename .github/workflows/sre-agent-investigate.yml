@@ -3,13 +3,10 @@ name: SRE Agent - Investigate Issue
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]
 
 jobs:
   investigate:
-    if: |
-      contains(github.event.issue.labels.*.name, 'production-issue') ||
-      contains(github.event.issue.labels.*.name, 'incident')
     runs-on: ubuntu-latest
 
     steps:
