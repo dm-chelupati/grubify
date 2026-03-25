@@ -14,6 +14,7 @@ param minReplicas int = 1
 param maxReplicas int = 3
 param env array = []
 param activeRevisionsMode string = 'Single'
+param httpConcurrency int = 10  // Concurrent requests per replica before scaling
 
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' existing = {
   name: containerAppsEnvironmentName
@@ -86,6 +87,16 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       scale: {
         minReplicas: minReplicas
         maxReplicas: maxReplicas
+        rules: [
+          {
+            name: 'http-scaling-rule'
+            http: {
+              metadata: {
+                concurrentRequests: string(httpConcurrency)
+              }
+            }
+          }
+        ]
       }
     }
   }

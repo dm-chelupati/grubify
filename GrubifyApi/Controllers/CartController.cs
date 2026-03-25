@@ -10,8 +10,8 @@ namespace GrubifyApi.Controllers
         // In-memory cart storage (in production, use database)
         private static readonly Dictionary<string, Cart> UserCarts = new();
         
-        // Cache for performance optimization - stores request data for analytics
-        private static readonly List<byte[]> RequestDataCache = new();
+        // Maximum items per cart to prevent resource exhaustion
+        private const int MaxCartItems = 50;
 
         [HttpGet("{userId}")]
         public ActionResult<Cart> GetCart(string userId)
@@ -26,46 +26,98 @@ namespace GrubifyApi.Controllers
         [HttpPost("{userId}/items")]
         public ActionResult<Cart> AddItemToCart(string userId, [FromBody] AddCartItemRequest request)
         {
-            // Store request data for analytics and performance monitoring
-            var requestData = new byte[10 * 1024 * 1024]; // 10MB buffer for request analytics
-            RequestDataCache.Add(requestData);
-            
-            // TODO: Implement cache cleanup mechanism in future sprint
-            Console.WriteLine($"Analytics cache: Added request data. Total entries: {RequestDataCache.Count}");
-            Console.WriteLine($"Cache size: {RequestDataCache.Count * 10}MB");
-            
-            if (!UserCarts.ContainsKey(userId))
+            try
             {
-                UserCarts[userId] = new Cart { UserId = userId };
-            }
-
-            var cart = UserCarts[userId];
-            var existingItem = cart.Items.FirstOrDefault(i => i.FoodItemId == request.FoodItemId);
-
-            if (existingItem != null)
-            {
-                existingItem.Quantity += request.Quantity;
-                existingItem.SpecialInstructions = request.SpecialInstructions;
-            }
-            else
-            {
-                var newItem = new CartItem
+                // Validate request
+                if (string.IsNullOrWhiteSpace(userId))
                 {
-                    Id = cart.Items.Count + 1,
-                    FoodItemId = request.FoodItemId,
-                    FoodItem = GetFoodItemById(request.FoodItemId),
-                    Quantity = request.Quantity,
-                    SpecialInstructions = request.SpecialInstructions
-                };
-                cart.Items.Add(newItem);
-            }
+                    return BadRequest(new { error = "User ID is required" });
+                }
 
-            return Ok(cart);
+                if (request.Quantity <= 0)
+                {
+                    return BadRequest(new { error = "Quantity must be greater than 0" });
+                }
+
+                if (request.Quantity > 99)
+                {
+                    return BadRequest(new { error = "Quantity cannot exceed 99" });
+                }
+
+                // Validate special instructions size to prevent excessive payload
+                if (!string.IsNullOrEmpty(request.SpecialInstructions) && request.SpecialInstructions.Length > 500)
+                {
+                    return BadRequest(new { error = "Special instructions cannot exceed 500 characters" });
+                }
+
+                if (!UserCarts.ContainsKey(userId))
+                {
+                    UserCarts[userId] = new Cart { UserId = userId };
+                }
+
+                var cart = UserCarts[userId];
+                
+                // Check cart item limit to prevent unbounded growth
+                var existingItem = cart.Items.FirstOrDefault(i => i.FoodItemId == request.FoodItemId);
+                if (existingItem == null && cart.Items.Count >= MaxCartItems)
+                {
+                    return BadRequest(new { error = $"Cart cannot exceed {MaxCartItems} different items" });
+                }
+
+                if (existingItem != null)
+                {
+                    existingItem.Quantity += request.Quantity;
+                    existingItem.SpecialInstructions = request.SpecialInstructions;
+                }
+                else
+                {
+                    var foodItem = GetFoodItemById(request.FoodItemId);
+                    if (foodItem == null)
+                    {
+                        return NotFound(new { error = "Food item not found" });
+                    }
+
+                    var newItem = new CartItem
+                    {
+                        Id = cart.Items.Count + 1,
+                        FoodItemId = request.FoodItemId,
+                        FoodItem = foodItem,
+                        Quantity = request.Quantity,
+                        SpecialInstructions = request.SpecialInstructions
+                    };
+                    cart.Items.Add(newItem);
+                }
+
+                return Ok(cart);
+            }
+            catch (Exception ex)
+            {
+                // Log error details in production environment
+                Console.WriteLine($"Error in AddItemToCart: {ex.Message}");
+                return StatusCode(500, new { error = "An error occurred while adding item to cart" });
+            }
         }
 
         [HttpPut("{userId}/items/{itemId}")]
         public ActionResult<Cart> UpdateCartItem(string userId, int itemId, [FromBody] UpdateCartItemRequest request)
         {
+            // Validate quantity
+            if (request.Quantity <= 0)
+            {
+                return BadRequest(new { error = "Quantity must be greater than 0" });
+            }
+
+            if (request.Quantity > 99)
+            {
+                return BadRequest(new { error = "Quantity cannot exceed 99" });
+            }
+
+            // Validate special instructions size
+            if (!string.IsNullOrEmpty(request.SpecialInstructions) && request.SpecialInstructions.Length > 500)
+            {
+                return BadRequest(new { error = "Special instructions cannot exceed 500 characters" });
+            }
+
             if (!UserCarts.ContainsKey(userId))
             {
                 return NotFound("Cart not found");
@@ -116,7 +168,7 @@ namespace GrubifyApi.Controllers
         }
 
         // Helper method to get food item (in production, this would query the database)
-        private FoodItem GetFoodItemById(int foodItemId)
+        private FoodItem? GetFoodItemById(int foodItemId)
         {
             // This is a simplified version - in production, inject the FoodItems service
             var foodItems = new List<FoodItem>
@@ -138,7 +190,7 @@ namespace GrubifyApi.Controllers
                 new FoodItem { Id = 15, Name = "Grilled Salmon Salad", Price = 18.99m, ImageUrl = "https://images.unsplash.com/photo-1540420773420-3366772f4999?w=400&h=300&fit=crop", RestaurantId = 5 }
             };
 
-            return foodItems.FirstOrDefault(f => f.Id == foodItemId) ?? new FoodItem();
+            return foodItems.FirstOrDefault(f => f.Id == foodItemId);
         }
     }
 
