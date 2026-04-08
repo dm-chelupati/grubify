@@ -24,7 +24,6 @@ import {
   Remove as RemoveIcon,
   AccessTime as TimeIcon,
   DeliveryDining as DeliveryIcon,
-  Star as StarIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Restaurant, FoodItem } from '../types';
@@ -41,6 +40,9 @@ const RestaurantPage: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const [cartSuccess, setCartSuccess] = useState<string | null>(null);
+  const [cartError, setCartError] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -76,16 +78,31 @@ const RestaurantPage: React.FC = () => {
   const confirmAddToCart = async () => {
     if (!selectedItem) return;
 
+    setAddingToCart(true);
+    setCartError(null);
+    setCartSuccess(null);
+
     try {
       await cartService.addItem('user123', {
         foodItemId: selectedItem.id,
         quantity,
         specialInstructions,
       });
+      
       setDialogOpen(false);
-      // You might want to show a success message here
+      setCartSuccess(`Added ${quantity} ${selectedItem.name} to cart!`);
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setCartSuccess(null), 3000);
+      
     } catch (err) {
       console.error('Error adding item to cart:', err);
+      setCartError('Failed to add item to cart. Please try again.');
+      
+      // Clear error after 5 seconds
+      setTimeout(() => setCartError(null), 5000);
+    } finally {
+      setAddingToCart(false);
     }
   };
 
@@ -175,6 +192,18 @@ const RestaurantPage: React.FC = () => {
           </Box>
         </CardContent>
       </Card>
+
+      {/* Success and Error Alerts */}
+      {cartSuccess && (
+        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setCartSuccess(null)}>
+          {cartSuccess}
+        </Alert>
+      )}
+      {cartError && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setCartError(null)}>
+          {cartError}
+        </Alert>
+      )}
 
       {/* Menu Items */}
       {Object.entries(groupedMenuItems).map(([category, items]) => (
@@ -281,9 +310,19 @@ const RestaurantPage: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button onClick={confirmAddToCart} variant="contained">
-            Add to Cart - ${selectedItem ? (selectedItem.price * quantity).toFixed(2) : '0.00'}
+          <Button onClick={() => setDialogOpen(false)} disabled={addingToCart}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={confirmAddToCart} 
+            variant="contained" 
+            disabled={addingToCart}
+            startIcon={addingToCart ? <CircularProgress size={20} /> : null}
+          >
+            {addingToCart 
+              ? 'Adding...' 
+              : `Add to Cart - $${selectedItem ? (selectedItem.price * quantity).toFixed(2) : '0.00'}`
+            }
           </Button>
         </DialogActions>
       </Dialog>

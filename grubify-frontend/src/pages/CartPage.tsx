@@ -19,7 +19,7 @@ import {
   ShoppingCart as CartIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { Cart, CartItem } from '../types';
+import { Cart } from '../types';
 import { cartService } from '../services/api';
 
 const CartPage: React.FC = () => {
