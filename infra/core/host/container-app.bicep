@@ -8,8 +8,8 @@ param containerName string
 param containerImage string
 param targetPort int = 80
 param external bool = false
-param cpu string = '0.5'
-param memory string = '1.0Gi'
+param cpu string = '1.0'
+param memory string = '2.0Gi'
 param minReplicas int = 1
 param maxReplicas int = 3
 param env array = []
@@ -86,6 +86,28 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
       scale: {
         minReplicas: minReplicas
         maxReplicas: maxReplicas
+        rules: [
+          {
+            name: 'cpu-scaling'
+            custom: {
+              type: 'cpu'
+              metadata: {
+                type: 'Utilization'
+                value: '70'
+              }
+            }
+          }
+          {
+            name: 'memory-scaling'
+            custom: {
+              type: 'memory'
+              metadata: {
+                type: 'Utilization'
+                value: '80'
+              }
+            }
+          }
+        ]
       }
     }
   }

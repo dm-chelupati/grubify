@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using GrubifyApi.Middleware;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -50,6 +51,9 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Global exception handler - must be early in pipeline
+app.UseMiddleware<GlobalExceptionHandler>();
 
 // Use forwarded headers for Azure Container Apps
 app.UseForwardedHeaders();
