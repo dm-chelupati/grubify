@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -6,6 +7,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Add in-memory cache with size limit for cart storage
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 500; // Max 500 cart entries in memory
+});
 
 // Configure forwarded headers for Azure Container Apps
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
